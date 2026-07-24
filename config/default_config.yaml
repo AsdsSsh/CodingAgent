@@ -1,0 +1,111 @@
+# ====== CodingAgent 默认配置 ======
+# 项目级覆盖：创建 .coding-agent/config.yaml
+# 全局覆盖：   ~/.coding-agent/config.yaml
+# 环境变量：  ANTHROPIC_API_KEY / OPENAI_API_KEY
+
+# -------- 模型配置 --------
+model:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+
+  ## 密钥（三种方式任选）
+  # 1. 环境变量（推荐）: export ANTHROPIC_API_KEY="sk-ant-..."
+  # 2. 配置文件:      api_key: "sk-ant-..."    （不推荐提交到 Git）
+  # 3. 自定义环境变量: api_key_env: MY_CUSTOM_KEY
+  # api_key: ""
+  # api_key_env: ANTHROPIC_API_KEY
+
+  ## 自定义端点（留空=官方）
+  # base_url: ""    # 示例: https://api.deepseek.com/v1
+  ## 温度 (null=API默认, 0.0=精确, 1.0=创意)
+  # temperature: 0.7
+
+  max_tokens: 8192
+  context_window: 200000
+
+# =============================================
+# === 常用模型配置（注释/取消注释来切换） ===
+# =============================================
+
+## --- Anthropic ---
+# model:
+#   provider: anthropic
+#   model: claude-sonnet-4-20250514        # Sonnet 4（推荐）
+#   # model: claude-opus-4-20250514        # Opus 4（最强）
+#   # model: claude-haiku-4-5-20251001     # Haiku 4.5（最快）
+#   max_tokens: 8192
+#   context_window: 200000
+
+## --- OpenAI GPT-4o ---
+# model:
+#   provider: openai
+#   model: gpt-4o
+#   max_tokens: 4096
+#   context_window: 128000
+
+## --- DeepSeek V4 Pro ---
+# model:
+#   provider: openai
+#   model: deepseek-v4-pro
+#   base_url: https://api.deepseek.com/v1
+#   api_key_env: DEEPSEEK_API_KEY
+#   max_tokens: 32768
+#   context_window: 1000000
+
+## --- Ollama 本地模型 (先运行: ollama pull qwen2.5:7b) ---
+# model:
+#   provider: openai
+#   model: qwen2.5:7b            # 换成你拉取的模型名
+#   base_url: http://localhost:11434/v1
+#   api_key: ollama               # Ollama 不需要真实 Key
+#   max_tokens: 4096
+#   context_window: 32768
+
+## --- vLLM 自部署 ---
+# model:
+#   provider: openai
+#   model: meta-llama/Meta-Llama-3-8B
+#   base_url: http://localhost:8000/v1
+#   api_key: not-needed
+#   max_tokens: 4096
+#   context_window: 8192
+
+## --- Gemini (via OpenAI 兼容层) ---
+# model:
+#   provider: openai
+#   model: gemini-2.0-flash
+#   base_url: https://generativelanguage.googleapis.com/v1beta/openai
+#   api_key_env: GEMINI_API_KEY
+#   max_tokens: 4096
+#   context_window: 1048576
+
+# -------- MCP 服务器（延迟加载） --------
+mcp_servers: []
+
+# -------- 权限 --------
+permissions:
+  default_level: READ
+  max_frequency: 10
+  frequency_window_seconds: 300
+
+# -------- 工作区 --------
+workspace: ""               # 空 = 当前目录
+
+# -------- 执行限制 --------
+max_iterations: 50
+
+# -------- 记忆存储 --------
+memory_path: ""             # 空 = ~/.coding-agent/memory.jsonl
+
+# -------- 沙箱 --------
+sandbox:
+  type: subprocess
+  timeout_seconds: 120
+  blocked_commands:
+    - "rm -rf /"
+    - "sudo"
+    - "dd if="
+    - "mkfs"
+    - ":(){ :|:& };:"
+    - "shutdown"
+    - "reboot"
