@@ -16,7 +16,15 @@
       "Bash(java -cp target/coding-agent-1.0-SNAPSHOT-jar-with-dependencies.jar com.codingagent.CodingAgentApp --help)",
       "Bash(java -cp target/coding-agent-1.0-SNAPSHOT-jar-with-dependencies.jar com.codingagent.CodingAgentApp run --help)",
       "Bash(java -cp target/coding-agent-1.0-SNAPSHOT-jar-with-dependencies.jar com.codingagent.CodingAgentApp run \"列出当前目录下所有的 .java 文件\")",
-      "WebFetch(domain:api-docs.deepseek.com)"
+      "WebFetch(domain:api-docs.deepseek.com)",
+      "Bash(openspec new *)",
+      "Bash(openspec status *)",
+      "Bash(openspec instructions *)",
+      "Bash(go mod *)",
+      "Bash(go build *)",
+      "Bash(go get *)",
+      "Bash(go test *)",
+      "Bash(git add *)"
     ]
   }
 }

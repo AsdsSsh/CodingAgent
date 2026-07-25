@@ -1,0 +1,11 @@
+# Go build artifacts
+coding-agent.exe
+coding-agent
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
