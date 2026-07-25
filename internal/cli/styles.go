@@ -39,21 +39,6 @@ var (
 
 	helpDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 
-	modalBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("11")).
-			Padding(1, 2)
-
-	modalTitleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("11"))
-
-	modalButtonStyle = lipgloss.NewStyle().Padding(0, 1)
-
-	modalActiveStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("63")).
-			Foreground(lipgloss.Color("15")).
-			Padding(0, 1)
 )
 
 // Styles holds all lipgloss styles used in the TUI.

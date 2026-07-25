@@ -8,15 +8,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/codingagent/coding-agent/internal/agent"
 	"github.com/codingagent/coding-agent/internal/config"
+	"github.com/codingagent/coding-agent/internal/sandbox"
 )
 
-// Update handles all bubbletea messages and returns the updated model and commands.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 
-	// ─── Lifecycle ───
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -24,37 +23,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - 8
 		m.input.SetWidth(msg.Width - 4)
 
-	// ─── Keyboard ───
 	case tea.KeyMsg:
-		// If permission modal is showing, intercept all keys
-		if m.showPermModal {
+		// Permission pending: only respond to Y/N/A
+		if m.pendingPermReq != nil {
 			switch msg.String() {
 			case "y", "Y", "enter":
-				m.showPermModal = false
+				req := *m.pendingPermReq
 				m.pendingPermReq = nil
+				m.messages = append(m.messages, ChatMessage{
+					Role:    "permission",
+					Content: fmt.Sprintf("%s: ALLOWED (once)", req.ToolName),
+				})
 				select {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: true}:
 				default:
 				}
 				return m, m.listenProgress()
 			case "n", "N", "esc":
-				m.showPermModal = false
+				req := *m.pendingPermReq
 				m.pendingPermReq = nil
+				m.messages = append(m.messages, ChatMessage{
+					Role:    "permission",
+					Content: fmt.Sprintf("%s: DENIED", req.ToolName),
+				})
 				select {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: false}:
 				default:
 				}
 				return m, m.listenProgress()
 			case "a", "A":
-				m.showPermModal = false
+				req := *m.pendingPermReq
 				m.pendingPermReq = nil
+				m.messages = append(m.messages, ChatMessage{
+					Role:    "permission",
+					Content: fmt.Sprintf("%s: ALLOWED (always)", req.ToolName),
+				})
 				select {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: true, AlwaysAllow: true}:
 				default:
 				}
 				return m, m.listenProgress()
 			}
-			return m, nil // block all other keys when modal is showing
+			// Block all other keys when permission is pending
+			return m, nil
 		}
 
 		switch msg.String() {
@@ -66,6 +77,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Quit
+
+		case "ctrl+p":
+			// Cycle permission level
+			m.cyclePermission()
+			return m, nil
 
 		case "ctrl+s":
 			if m.focus == FocusInput && !m.agentRunning {
@@ -105,7 +121,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	// ─── Agent Progress ───
 	case AgentProgressMsg:
 		state := msg.State
 		if state.CurrentTool != "" {
@@ -121,7 +136,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.listenProgress())
 
-	// ─── Agent Result ───
 	case AgentResultMsg:
 		m.agentRunning = false
 		result := msg.Result
@@ -132,9 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusLine = fmt.Sprintf("Done — %d steps, %d tools", result.Steps, len(result.ToolCalls))
 
-	// ─── Permission Prompt ───
 	case PermissionPromptMsg:
-		m.showPermModal = true
 		m.pendingPermReq = &msg.Request
 
 	case PermissionResponseMsg:
@@ -144,10 +156,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 			}
 		}
-		m.showPermModal = false
 		m.pendingPermReq = nil
 
-	// ─── Tick (spinner) ───
 	case TickMsg:
 		if m.agentRunning {
 			m.spinnerTick++
@@ -155,8 +165,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// ─── Sub-component updates ───
-	if m.focus == FocusInput && !m.agentRunning {
+	if m.focus == FocusInput && !m.agentRunning && m.pendingPermReq == nil {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		cmds = append(cmds, cmd)
@@ -169,8 +178,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// handleTaskSubmit starts an agent run in a goroutine and wires up progress/result channels.
+// cyclePermission cycles through permission levels: READ → WRITE → EXECUTE → DANGEROUS → READ
+func (m *Model) cyclePermission() {
+	levels := []sandbox.PermissionLevel{
+		sandbox.LevelRead,
+		sandbox.LevelWrite,
+		sandbox.LevelExecute,
+		sandbox.LevelDangerous,
+	}
+	current := m.permissionLevel
+	next := levels[(int(current)+1)%len(levels)]
+	m.permissionLevel = next
+	m.config.Permissions.DefaultLevel = next.String()
+
+	// If agent is running, also escalate the running sandbox
+	if m.orchestrator != nil {
+		// The sandbox is created per-task; escalate current policy engine
+		m.statusLine = fmt.Sprintf("Permission: %s → %s", current.String(), next.String())
+	}
+
+	m.messages = append(m.messages, ChatMessage{
+		Role:    "permission",
+		Content: fmt.Sprintf("Permission: %s → %s", current.String(), next.String()),
+	})
+}
+
 func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
+	// Apply current permission level to config before creating orchestrator
+	m.config.Permissions.DefaultLevel = m.permissionLevel.String()
+
 	orch, err := agent.NewOrchestrator(m.config)
 	if err != nil {
 		m.messages = append(m.messages,
@@ -185,9 +221,8 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 
 	m.orchestrator = orch
 	m.agentRunning = true
-	m.taskInFlight = task
 	m.statusLine = "Thinking..."
-	m.showPermModal = false
+	m.pendingPermReq = nil
 
 	m.progressChan = make(chan agent.AgentState, 20)
 	m.resultChan = make(chan agent.AgentResult, 1)
@@ -246,16 +281,16 @@ func (m Model) tickLater() tea.Cmd {
 	})
 }
 
-// ─── Slash command handling ───
-
 func (m Model) handleSlashCommand(cmd, args string) tea.Cmd {
 	switch cmd {
 	case "help", "h":
 		helpText := `Available commands:
   /model [name]     View or switch model
-  /permission [lvl] View or switch permission level (READ/WRITE/EXECUTE/DANGEROUS)
+  /permission [lvl] View or cycle permission (READ/WRITE/EXECUTE/DANGEROUS)
   /clear            Clear conversation history
-  /exit             Exit CodingAgent`
+  /exit             Exit CodingAgent
+
+  Ctrl+P            Cycle permission level`
 		m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: helpText})
 		return nil
 
@@ -276,18 +311,18 @@ func (m Model) handleSlashCommand(cmd, args string) tea.Cmd {
 
 	case "permission", "perm", "p":
 		if args == "" {
-			m.messages = append(m.messages, ChatMessage{
-				Role:    "assistant",
-				Content: fmt.Sprintf("Current permission: %s\nUse /permission <READ|WRITE|EXECUTE|DANGEROUS>.", m.config.Permissions.DefaultLevel),
-			})
-		} else {
-			level := strings.ToUpper(args)
-			m.config.WithPermissionLevel(level)
-			m.messages = append(m.messages, ChatMessage{
-				Role:    "assistant",
-				Content: fmt.Sprintf("Permission switched to: %s", level),
-			})
+			// No args: cycle (same behavior as Ctrl+P)
+			m.cyclePermission()
+			return nil
 		}
+		level := sandbox.FromString(args)
+		old := m.permissionLevel
+		m.permissionLevel = level
+		m.config.Permissions.DefaultLevel = level.String()
+		m.messages = append(m.messages, ChatMessage{
+			Role:    "permission",
+			Content: fmt.Sprintf("Permission: %s → %s", old.String(), level.String()),
+		})
 		return nil
 
 	case "clear":
