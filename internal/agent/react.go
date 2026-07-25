@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -72,7 +73,7 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 		r.emitProgressWithTool(opts, step, messages, "")
 
 		// === THOUGHT: Call LLM ===
-		response, err := r.llm.Chat(messages, r.toolRegistry.ToLLMFormats())
+		response, err := r.llm.Chat(context.Background(), messages, r.toolRegistry.ToLLMFormats())
 		if err != nil {
 			messages = append(messages, llm.User(fmt.Sprintf("LLM error: %v. Please try to continue.", err)))
 			continue
@@ -128,7 +129,7 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 
 	// Max iterations reached
 	messages = append(messages, llm.User("You have reached the maximum number of steps. Please provide your final answer now."))
-	finalResp, err := r.llm.Chat(messages, nil)
+	finalResp, err := r.llm.Chat(context.Background(), messages, nil)
 	if err != nil {
 		return AgentResult{
 			Answer:    "Error: Failed to get final answer after max iterations: " + err.Error(),

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ func NewOpenAIProvider(apiKey, model string, maxTokens, contextWindow int, baseU
 	baseURL = strings.TrimSuffix(baseURL, "/")
 	return &OpenAIProvider{
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 		apiKey:        apiKey,
 		model:         model,
@@ -46,7 +47,7 @@ func NewOpenAIProvider(apiKey, model string, maxTokens, contextWindow int, baseU
 func (p *OpenAIProvider) ModelName() string     { return p.model }
 func (p *OpenAIProvider) ContextWindow() int     { return p.contextWindow }
 
-func (p *OpenAIProvider) Chat(messages []Message, tools []map[string]any) (LlmResponse, error) {
+func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []map[string]any) (LlmResponse, error) {
 	body := map[string]any{
 		"model":      p.model,
 		"max_tokens": p.maxTokens,
@@ -67,7 +68,7 @@ func (p *OpenAIProvider) Chat(messages []Message, tools []map[string]any) (LlmRe
 		return LlmResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewReader(reqBody))
 	if err != nil {
 		return LlmResponse{}, fmt.Errorf("create request: %w", err)
 	}

@@ -1,5 +1,7 @@
 package llm
 
+import "context"
+
 // Provider is the abstraction for all LLM backends (Anthropic, OpenAI, local models).
 // All methods are synchronous — concurrency is handled by the caller via goroutines.
 type Provider interface {
@@ -11,7 +13,8 @@ type Provider interface {
 
 	// Chat sends messages to the LLM and returns text or tool calls.
 	// Tools are passed as provider-agnostic maps; each provider converts to its own API format.
-	Chat(messages []Message, tools []map[string]any) (LlmResponse, error)
+	// The context is used to cancel in-flight HTTP requests.
+	Chat(ctx context.Context, messages []Message, tools []map[string]any) (LlmResponse, error)
 
 	// CountTokens returns a rough token count for a string.
 	CountTokens(text string) int

@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +28,7 @@ type AnthropicProvider struct {
 func NewAnthropicProvider(apiKey, model string, maxTokens, contextWindow int) *AnthropicProvider {
 	return &AnthropicProvider{
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout: 60 * time.Second,
 		},
 		apiKey:        apiKey,
 		model:         model,
@@ -39,7 +40,7 @@ func NewAnthropicProvider(apiKey, model string, maxTokens, contextWindow int) *A
 func (p *AnthropicProvider) ModelName() string     { return p.model }
 func (p *AnthropicProvider) ContextWindow() int     { return p.contextWindow }
 
-func (p *AnthropicProvider) Chat(messages []Message, tools []map[string]any) (LlmResponse, error) {
+func (p *AnthropicProvider) Chat(ctx context.Context, messages []Message, tools []map[string]any) (LlmResponse, error) {
 	body := map[string]any{
 		"model":      p.model,
 		"max_tokens": p.maxTokens,
@@ -61,7 +62,7 @@ func (p *AnthropicProvider) Chat(messages []Message, tools []map[string]any) (Ll
 		return LlmResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", anthropicAPIURL, bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIURL, bytes.NewReader(reqBody))
 	if err != nil {
 		return LlmResponse{}, fmt.Errorf("create request: %w", err)
 	}
