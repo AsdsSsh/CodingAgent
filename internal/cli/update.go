@@ -39,7 +39,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: true}:
 				default:
 				}
-				return m, m.listenProgress()
+				return m, tea.Batch(m.listenProgress(), m.listenPermission())
 			case "n", "N", "esc":
 				req := *m.pendingPermReq
 				m.pendingPermReq = nil
@@ -51,7 +51,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: false}:
 				default:
 				}
-				return m, m.listenProgress()
+				return m, tea.Batch(m.listenProgress(), m.listenPermission())
 			case "a", "A":
 				req := *m.pendingPermReq
 				m.pendingPermReq = nil
@@ -63,7 +63,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case m.permRespChan <- agent.PermissionResponse{Allowed: true, AlwaysAllow: true}:
 				default:
 				}
-				return m, m.listenProgress()
+				return m, tea.Batch(m.listenProgress(), m.listenPermission())
 			}
 			// Block all other keys when permission is pending
 			return m, nil
