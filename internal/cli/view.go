@@ -37,36 +37,110 @@ func (m Model) renderHeader() string {
 func (m Model) renderViewport() string {
 	var sb strings.Builder
 
-	for _, msg := range m.messages {
-		switch msg.Role {
-		case "user":
-			sb.WriteString(userStyle.Render("\n> " + msg.Content) + "\n")
-		case "assistant":
-			sb.WriteString(asstStyle.Render(renderMarkdown(msg.Content)) + "\n")
-		case "tool":
-			if msg.ToolOk {
-				sb.WriteString(toolOkStyle.Render("  ✓ " + msg.Content) + "\n")
-			} else {
-				sb.WriteString(toolFailStyle.Render("  ✗ " + msg.Content) + "\n")
+	// Welcome screen when no messages
+	if len(m.messages) == 0 {
+		sb.WriteString(m.renderWelcome())
+	} else {
+		var lastRole string
+		for i, msg := range m.messages {
+			// Insert divider between turns (user→assistant transitions)
+			if i > 0 && msg.Role == "user" && lastRole != "user" {
+				sb.WriteString(dividerStyle.Render(strings.Repeat("─", m.width-4)) + "\n")
 			}
-		case "error":
-			sb.WriteString(errorStyle.Render("  ⚠ " + msg.Content) + "\n")
+
+			switch msg.Role {
+			case "user":
+				sb.WriteString(m.renderUserMessage(msg))
+			case "assistant":
+				sb.WriteString(m.renderAssistantMessage(msg))
+			case "tool":
+				if msg.ToolOk {
+					sb.WriteString(toolOkStyle.Render("  ✓ " + msg.Content) + "\n")
+				} else {
+					sb.WriteString(toolFailStyle.Render("  ✗ " + msg.Content) + "\n")
+				}
+			case "error":
+				sb.WriteString(m.renderErrorMessage(msg))
+			}
+			lastRole = msg.Role
 		}
 	}
 
-	if m.agentRunning {
-		sb.WriteString(dividerStyle.Render(strings.Repeat("─", m.width-4)) + "\n")
-	}
-
 	m.viewport.SetContent(sb.String())
+	m.viewport.GotoBottom()
 	return m.viewport.View()
+}
+
+func (m Model) renderWelcome() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString("\n")
+
+	logo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("63")).
+		Bold(true).
+		Render("  ╔══════════════════════════════╗\n" +
+			"  ║   🖥️  CodingAgent Go         ║\n" +
+			"  ╚══════════════════════════════╝")
+	sb.WriteString(logo)
+	sb.WriteString("\n\n")
+
+	info := statusDim.Render("  Model: " + m.config.Model.Model +
+		"  │  Permission: " + m.config.Permissions.DefaultLevel +
+		"  │  Workspace: " + m.config.Workspace)
+	sb.WriteString(info)
+	sb.WriteString("\n\n")
+
+	tips := []string{
+		"  Enter  → submit a single-line task",
+		"  Ctrl+S → submit multi-line",
+		"  /help  → see all commands",
+		"  /exit  → quit",
+	}
+	for _, tip := range tips {
+		sb.WriteString(statusDim.Render(tip) + "\n")
+	}
+	sb.WriteString("\n")
+	sb.WriteString(asstStyle.Render("  Type a programming task to begin..."))
+
+	return sb.String()
+}
+
+func (m Model) renderUserMessage(msg ChatMessage) string {
+	prefix := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("12")).
+		Bold(true).
+		Render("▌")
+	return prefix + " " + userStyle.Render(msg.Content) + "\n"
+}
+
+func (m Model) renderAssistantMessage(msg ChatMessage) string {
+	if msg.Content == "" {
+		return ""
+	}
+	return asstStyle.Render(renderMarkdown(msg.Content)) + "\n\n"
+}
+
+func (m Model) renderErrorMessage(msg ChatMessage) string {
+	return errorStyle.Render("  ⚠  " + msg.Content) + "\n"
 }
 
 func (m Model) renderStatusBar() string {
 	if m.agentRunning {
 		spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 		frame := spinner[m.spinnerTick%len(spinner)]
-		return statusStyle.Render(spinnerStyle.Render(frame) + " " + m.statusLine)
+
+		// Distinguish thinking vs executing
+		var stateText string
+		if strings.Contains(m.statusLine, "·") && !strings.Contains(m.statusLine, "Step") {
+			stateText = m.statusLine
+		} else if m.statusLine == "Thinking..." {
+			stateText = spinnerStyle.Render("🧠 ") + m.statusLine
+		} else {
+			stateText = spinnerStyle.Render("🔧 ") + m.statusLine
+		}
+
+		return statusStyle.Render(spinnerStyle.Render(frame) + " " + stateText)
 	}
 	return statusStyle.Render(statusDim.Render("idle — " + m.statusLine))
 }
@@ -80,11 +154,11 @@ func (m Model) renderInput() string {
 
 func (m Model) renderHelpBar() string {
 	help := lipgloss.JoinHorizontal(lipgloss.Center,
-		"Ctrl+Enter: Submit",
+		"Enter: Submit (1 line)",
+		helpDimStyle.Render(" │ "),
+		"Ctrl+S: Submit (multi)",
 		helpDimStyle.Render(" │ "),
 		"Ctrl+C: Cancel/Quit",
-		helpDimStyle.Render(" │ "),
-		"Tab: Switch focus",
 		helpDimStyle.Render(" │ "),
 		"/: Commands",
 	)
@@ -93,17 +167,18 @@ func (m Model) renderHelpBar() string {
 
 func (m Model) renderPermissionModal() string {
 	req := m.pendingPermReq
-	title := modalTitleStyle.Render("⚠️ Permission Required")
+	title := modalTitleStyle.Render("⚠️  Permission Required")
 	body := fmt.Sprintf("\nTool: %s\n\nReason: %s\n\n", req.ToolName, req.Reason)
 	buttons := lipgloss.JoinHorizontal(lipgloss.Center,
-		modalActiveStyle.Render("[ Allow ]"),
+		modalActiveStyle.Render("[Y] Allow"),
 		"  ",
-		modalButtonStyle.Render("[ Deny ]"),
+		modalButtonStyle.Render("[N] Deny"),
 		"  ",
-		modalButtonStyle.Render("[ Always Allow ]"),
+		modalButtonStyle.Render("[A] Always Allow"),
 	)
+	help := statusDim.Render("\n\nPress Y/N/A or Enter/Esc")
 
-	content := title + "\n" + body + "\n" + buttons
+	content := title + "\n" + body + "\n" + buttons + help
 	box := modalBoxStyle.Render(content)
 
 	return lipgloss.Place(m.width, m.height,
@@ -113,7 +188,6 @@ func (m Model) renderPermissionModal() string {
 }
 
 func (m Model) estimatedTokens() int {
-	// Rough estimate from conversation messages
 	total := 0
 	for _, msg := range m.messages {
 		total += len(msg.Content) / 4

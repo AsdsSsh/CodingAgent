@@ -68,7 +68,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "ctrl+s":
-			// Ctrl+S: primary submit (works cross-platform)
 			if m.focus == FocusInput && !m.agentRunning {
 				task := strings.TrimSpace(m.input.Value())
 				if task != "" {
@@ -79,11 +78,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			// Enter: submit if the input only has one line (not multi-line)
 			if m.focus == FocusInput && !m.agentRunning {
 				task := strings.TrimSpace(m.input.Value())
 				if strings.HasPrefix(task, "/") {
-					// Slash command on single line
 					cmd, args := parseSlashCommand(task)
 					if cmd != "" {
 						m.input.Reset()
@@ -96,7 +93,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.handleTaskSubmit(task)
 				}
 			}
-			// Multi-line: let textarea handle Enter for newline (falls through to sub-component update)
 
 		case "tab":
 			if m.focus == FocusInput {
@@ -112,16 +108,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ─── Agent Progress ───
 	case AgentProgressMsg:
 		state := msg.State
-		m.statusLine = fmt.Sprintf("Step %d · %s · %d tokens",
-			state.Step, state.CurrentTool, state.ConversationTokens)
 		if state.CurrentTool != "" {
+			m.statusLine = fmt.Sprintf("Step %d · %s · %d tokens",
+				state.Step, state.CurrentTool, state.ConversationTokens)
 			m.messages = append(m.messages, ChatMessage{
 				Role:   "tool",
-				Content: state.CurrentTool,
+				Content: fmt.Sprintf("Step %d: %s", state.Step, state.CurrentTool),
 				ToolOk: true,
 			})
+		} else {
+			m.statusLine = fmt.Sprintf("Thinking... (%d tokens)", state.ConversationTokens)
 		}
-		// Continue listening for more progress
 		cmds = append(cmds, m.listenProgress())
 
 	// ─── Agent Result ───
@@ -174,7 +171,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleTaskSubmit starts an agent run in a goroutine and wires up progress/result channels.
 func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
-	// Create orchestrator for this task
 	orch, err := agent.NewOrchestrator(m.config)
 	if err != nil {
 		m.messages = append(m.messages,
@@ -190,19 +186,16 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 	m.orchestrator = orch
 	m.agentRunning = true
 	m.taskInFlight = task
-	m.statusLine = "Starting..."
+	m.statusLine = "Thinking..."
 	m.showPermModal = false
 
-	// Create channels
 	m.progressChan = make(chan agent.AgentState, 20)
 	m.resultChan = make(chan agent.AgentResult, 1)
 	m.permReqChan = make(chan agent.PermissionRequest, 5)
 	m.permRespChan = make(chan agent.PermissionResponse, 5)
 
-	// Run agent in goroutine
 	go func() {
 		result := orch.RunWithChannels(task, m.progressChan, m.permReqChan, m.permRespChan)
-		// Signal completion by closing channels
 		close(m.progressChan)
 		m.resultChan <- result
 	}()
@@ -215,18 +208,16 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 	)
 }
 
-// listenProgress returns a command that waits for the next progress update.
 func (m Model) listenProgress() tea.Cmd {
 	return func() tea.Msg {
 		state, ok := <-m.progressChan
 		if !ok {
-			return nil // Channel closed
+			return nil
 		}
 		return AgentProgressMsg{State: state}
 	}
 }
 
-// waitForResult returns a command that waits for the final agent result.
 func (m Model) waitForResult() tea.Cmd {
 	return func() tea.Msg {
 		result, ok := <-m.resultChan
@@ -239,7 +230,6 @@ func (m Model) waitForResult() tea.Cmd {
 	}
 }
 
-// listenPermission returns a command that waits for permission requests from the agent.
 func (m Model) listenPermission() tea.Cmd {
 	return func() tea.Msg {
 		req, ok := <-m.permReqChan
@@ -250,7 +240,6 @@ func (m Model) listenPermission() tea.Cmd {
 	}
 }
 
-// tickLater schedules a TickMsg after a short delay for spinner animation.
 func (m Model) tickLater() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return TickMsg{}
@@ -259,7 +248,6 @@ func (m Model) tickLater() tea.Cmd {
 
 // ─── Slash command handling ───
 
-// handleSlashCommand processes a slash command and returns updated model.
 func (m Model) handleSlashCommand(cmd, args string) tea.Cmd {
 	switch cmd {
 	case "help", "h":
@@ -319,7 +307,6 @@ func (m Model) handleSlashCommand(cmd, args string) tea.Cmd {
 	}
 }
 
-// parseSlashCommand extracts the command and args from a slash-prefixed string.
 func parseSlashCommand(input string) (cmd, args string) {
 	input = strings.TrimSpace(input)
 	if !strings.HasPrefix(input, "/") {
@@ -333,7 +320,6 @@ func parseSlashCommand(input string) (cmd, args string) {
 	return
 }
 
-// NewConfigFromCLI creates a config from CLI-relevant parameters.
 func NewConfigFromCLI(provider, model, apiKey, baseURL, workspace string) (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
