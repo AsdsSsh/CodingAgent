@@ -26,10 +26,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ─── Keyboard ───
 	case tea.KeyMsg:
+		// If permission modal is showing, intercept all keys
+		if m.showPermModal {
+			switch msg.String() {
+			case "y", "Y", "enter":
+				m.showPermModal = false
+				m.pendingPermReq = nil
+				select {
+				case m.permRespChan <- agent.PermissionResponse{Allowed: true}:
+				default:
+				}
+				return m, m.listenProgress()
+			case "n", "N", "esc":
+				m.showPermModal = false
+				m.pendingPermReq = nil
+				select {
+				case m.permRespChan <- agent.PermissionResponse{Allowed: false}:
+				default:
+				}
+				return m, m.listenProgress()
+			case "a", "A":
+				m.showPermModal = false
+				m.pendingPermReq = nil
+				select {
+				case m.permRespChan <- agent.PermissionResponse{Allowed: true, AlwaysAllow: true}:
+				default:
+				}
+				return m, m.listenProgress()
+			}
+			return m, nil // block all other keys when modal is showing
+		}
+
 		switch msg.String() {
 		case "ctrl+c":
 			if m.agentRunning {
-				// Cancel running agent
 				m.agentRunning = false
 				m.messages = append(m.messages, ChatMessage{Role: "error", Content: "Task cancelled"})
 				m.statusLine = "Cancelled"
@@ -147,7 +177,13 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 	// Create orchestrator for this task
 	orch, err := agent.NewOrchestrator(m.config)
 	if err != nil {
-		m.messages = append(m.messages, ChatMessage{Role: "error", Content: "Failed to initialize: " + err.Error()})
+		m.messages = append(m.messages,
+			ChatMessage{Role: "error", Content: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"},
+			ChatMessage{Role: "error", Content: "⚠️  INITIALIZATION FAILED"},
+			ChatMessage{Role: "error", Content: err.Error()},
+			ChatMessage{Role: "error", Content: "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"},
+			ChatMessage{Role: "assistant", Content: "Please set your API key:\n  export DEEPSEEK_API_KEY=\"sk-...\"\nOr edit .coding-agent/config.yaml"},
+		)
 		return m, nil
 	}
 
@@ -182,15 +218,11 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 // listenProgress returns a command that waits for the next progress update.
 func (m Model) listenProgress() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case state, ok := <-m.progressChan:
-			if !ok {
-				return nil // Channel closed
-			}
-			return AgentProgressMsg{State: state}
-		case <-time.After(5 * time.Second):
-			return TickMsg{} // Timeout, retry
+		state, ok := <-m.progressChan
+		if !ok {
+			return nil // Channel closed
 		}
+		return AgentProgressMsg{State: state}
 	}
 }
 

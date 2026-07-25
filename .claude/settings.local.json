@@ -24,7 +24,11 @@
       "Bash(go build *)",
       "Bash(go get *)",
       "Bash(go test *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(timeout 3 ./coding-agent.exe)",
+      "Bash(git commit *)",
+      "Bash(awk 'NR==108,NR==116' internal/agent/react.go)",
+      "Bash(xxd)"
     ]
   }
 }

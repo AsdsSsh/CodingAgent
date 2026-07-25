@@ -44,7 +44,6 @@ type RunOptions struct {
 	ProgressChan chan<- AgentState
 
 	// PermissionChan is used for blocking permission prompts.
-	// ReActLoop sends a PermissionRequest and waits for a response.
 	PermissionChan chan<- PermissionRequest
 	PermissionResp <-chan PermissionResponse
 }
@@ -63,7 +62,6 @@ type PermissionResponse struct {
 
 // Run executes a full ReAct cycle for a single task.
 func (r *ReActLoop) Run(opts RunOptions) AgentResult {
-	// Build initial message context
 	messages := []llm.Message{llm.System(opts.SystemPrompt)}
 	messages = append(messages, llm.User(opts.Task))
 
@@ -71,8 +69,7 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 	policyEngine := opts.Sandbox.PolicyEngine()
 
 	for step := 1; step <= r.maxIter; step++ {
-		// Emit progress
-		r.emitProgress(opts, step, messages)
+		r.emitProgressWithTool(opts, step, messages, "")
 
 		// === THOUGHT: Call LLM ===
 		response, err := r.llm.Chat(messages, r.toolRegistry.ToLLMFormats())
@@ -92,7 +89,6 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 					ToolCalls: toolCallRecords,
 				}
 			}
-			// Free text reasoning — continue loop
 			continue
 		}
 
@@ -104,9 +100,10 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 
 		results := make([]indexedResult, len(response.ToolCalls))
 
-		// Execute tools concurrently when safe
 		var wg sync.WaitGroup
 		for i, tc := range response.ToolCalls {
+			// Emit progress with tool name before each tool execution
+			r.emitProgressWithTool(opts, step, messages, tc.Name)
 			wg.Add(1)
 			go func(idx int, call llm.ToolCall) {
 				defer wg.Done()
@@ -120,7 +117,6 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 		for i := range response.ToolCalls {
 			tc := response.ToolCalls[i]
 			messages = append(messages, llm.AssistantWithToolCalls(llm.CloneToolCall(tc)))
-			// Find result by index
 			for _, r := range results {
 				if r.index == i {
 					messages = append(messages, llm.ToolResult(tc.ID, r.result))
@@ -130,7 +126,7 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 		}
 	}
 
-	// Max iterations reached — force final answer
+	// Max iterations reached
 	messages = append(messages, llm.User("You have reached the maximum number of steps. Please provide your final answer now."))
 	finalResp, err := r.llm.Chat(messages, nil)
 	if err != nil {
@@ -149,9 +145,7 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 	}
 }
 
-// executeTool handles a single tool call: permission check → execution → observation.
 func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.PolicyEngine, records *[]ToolCallRecord) string {
-	// Unknown tool → error observation
 	if !r.toolRegistry.Has(call.Name) {
 		available := r.toolNames()
 		*records = append(*records, ToolCallRecord{Name: call.Name, Args: call.Arguments, Success: false})
@@ -159,8 +153,6 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 	}
 
 	t := r.toolRegistry.Resolve(call.Name)
-
-	// Permission check
 	decision := pe.Check(call.Name, t.RequiredPermission())
 
 	switch decision.Verdict {
@@ -170,7 +162,6 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 
 	case sandbox.VerdictPrompt:
 		if opts.PermissionChan != nil && opts.PermissionResp != nil {
-			// Blocking prompt: send request, wait for response
 			opts.PermissionChan <- PermissionRequest{ToolName: call.Name, Reason: decision.Reason}
 			resp := <-opts.PermissionResp
 			if !resp.Allowed {
@@ -181,17 +172,14 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 				pe.AddOverride(call.Name, true)
 			}
 		} else {
-			// Non-blocking: return error observation so agent can retry
 			*records = append(*records, ToolCallRecord{Name: call.Name, Args: call.Arguments, Success: false})
 			return "Error: Tool '" + call.Name + "' requires permission escalation: " + decision.Reason +
 				". Use a different approach or ask the user to escalate permissions."
 		}
 
 	case sandbox.VerdictAllow:
-		// Proceed
 	}
 
-	// Execute tool in sandbox
 	ctx := tool.ToolContext{Workspace: opts.Workspace, Sandbox: opts.Sandbox}
 	result := t.Execute(ctx, call.Arguments)
 	*records = append(*records, ToolCallRecord{Name: call.Name, Args: call.Arguments, Success: result.Success})
@@ -202,7 +190,7 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 	return "Error executing " + call.Name + ": " + result.Error
 }
 
-func (r *ReActLoop) emitProgress(opts RunOptions, step int, messages []llm.Message) {
+func (r *ReActLoop) emitProgressWithTool(opts RunOptions, step int, messages []llm.Message, toolName string) {
 	if opts.ProgressChan == nil {
 		return
 	}
@@ -210,12 +198,12 @@ func (r *ReActLoop) emitProgress(opts RunOptions, step int, messages []llm.Messa
 		Task:               opts.Task,
 		Step:               step,
 		ConversationTokens: r.llm.CountMessagesTokens(messages),
+		CurrentTool:        toolName,
 		PermissionLevel:    opts.Sandbox.PolicyEngine().CurrentLevel().String(),
 	}
 	select {
 	case opts.ProgressChan <- state:
 	default:
-		// Don't block if channel is full
 	}
 }
 
