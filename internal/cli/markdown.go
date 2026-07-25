@@ -107,8 +107,8 @@ func renderMarkdown(md string) string {
 var (
 	boldRe      = regexp.MustCompile(`\*\*(.+?)\*\*`)
 	boldRe2     = regexp.MustCompile(`__(.+?)__`)
-	italicRe    = regexp.MustCompile(`(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)`)
-	italicRe2   = regexp.MustCompile(`(?<!_)_(?!_)(.+?)(?<!_)_(?!_)`)
+	italicRe    = regexp.MustCompile(`\*([^*]+)\*`)
+	italicRe2   = regexp.MustCompile(`_([^_]+)_`)
 	codeRe      = regexp.MustCompile("`([^`]+)`")
 	linkRe      = regexp.MustCompile(`\[([^\]]+)]\([^)]+\)`)
 )
