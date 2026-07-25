@@ -1,18 +1,18 @@
-## 1. Inline permission prompt
+## 1. 内联权限提示
 
-- [ ] 1.1 Render permission request as inline border block in viewport
-- [ ] 1.2 Block input when permission is pending (hide textarea)
-- [ ] 1.3 Record permission decision in conversation history
-- [ ] 1.4 Remove full-screen modal rendering
+- [x] 1.1 在 viewport 中将权限请求渲染为内联边框块
+- [x] 1.2 权限挂起时阻断输入（隐藏 textarea）
+- [x] 1.3 在对话历史中记录权限决策
+- [x] 1.4 移除全屏模态渲染
 
-## 2. Active permission switching (Ctrl+P)
+## 2. 主动权限切换（Ctrl+P）
 
-- [ ] 2.1 Add Ctrl+P keybinding to cycle permission levels
-- [ ] 2.2 Update sandbox policy engine on active switch
-- [ ] 2.3 Show confirmation message in conversation
-- [ ] 2.4 /permission without args also cycles
+- [x] 2.1 添加 Ctrl+P 快捷键循环切换权限级别
+- [x] 2.2 主动切换时更新沙箱权限引擎
+- [x] 2.3 在对话中显示确认消息
+- [x] 2.4 /permission 无参数时也进行循环切换
 
-## 3. Real-time permission display
+## 3. 实时权限显示
 
-- [ ] 3.1 Color-code permission level in header
-- [ ] 3.2 Show permission in status bar when idle
+- [x] 3.1 Header 中按颜色编码权限级别
+- [x] 3.2 空闲时在状态栏显示权限级别

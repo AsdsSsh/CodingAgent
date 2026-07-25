@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -71,6 +72,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			if m.agentRunning {
+				if m.cancelFunc != nil {
+					m.cancelFunc() // cancel in-flight LLM request
+				}
 				m.agentRunning = false
 				m.messages = append(m.messages, ChatMessage{Role: "error", Content: "Task cancelled"})
 				m.statusLine = "Cancelled"
@@ -229,8 +233,11 @@ func (m Model) handleTaskSubmit(task string) (tea.Model, tea.Cmd) {
 	m.permReqChan = make(chan agent.PermissionRequest, 5)
 	m.permRespChan = make(chan agent.PermissionResponse, 5)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelFunc = cancel
+
 	go func() {
-		result := orch.RunWithChannels(task, m.progressChan, m.permReqChan, m.permRespChan)
+		result := orch.RunWithChannels(ctx, task, m.progressChan, m.permReqChan, m.permRespChan)
 		close(m.progressChan)
 		m.resultChan <- result
 	}()

@@ -1,15 +1,15 @@
-## 1. Fix listenProgress timeout
+## 1. 修复 listenProgress 超时自毁
 
-- [x] 1.1 Remove 5s timeout from `listenProgress`, use pure blocking channel read
+- [x] 1.1 移除 `listenProgress` 的 5s 超时，改用纯阻塞 channel 读取
 
-## 2. Fix emitProgress missing CurrentTool
+## 2. 修复 emitProgress 缺失 CurrentTool
 
-- [x] 2.1 Add tool name emission in ReActLoop's tool execution loop
+- [x] 2.1 在 ReActLoop 工具执行循环中添加工具名发射
 
-## 3. Fix permission modal dead-end
+## 3. 修复权限弹窗死胡同
 
-- [x] 3.1 Add keyboard handling for permission modal: y/Enter=Allow, n/Esc=Deny, a=Always Allow
+- [x] 3.1 为权限模态添加键盘处理：y/Enter=Allow、n/Esc=Deny、a=Always Allow
 
-## 4. Improve API key error visibility
+## 4. 改善 API Key 错误可见性
 
-- [x] 4.1 Make initialization errors more visible with red banner styling
+- [x] 4.1 将初始化错误改为红色横幅样式显示

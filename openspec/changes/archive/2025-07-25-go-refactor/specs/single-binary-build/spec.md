@@ -1,45 +1,45 @@
-## ADDED Requirements
+## ADDED 需求
 
-### Requirement: Go module structure with standard layout
-The system SHALL use Go's standard project layout with `cmd/` for the entry point and `internal/` for all application packages.
+### Requirement: 标准布局的 Go module 结构
+系统 SHALL 使用 Go 标准项目布局，入口点在 `cmd/`，所有应用包在 `internal/`。
 
-#### Scenario: Build from source
-- **WHEN** `go build ./cmd/coding-agent` is executed
-- **THEN** the system SHALL produce a single executable binary named `coding-agent` (or `coding-agent.exe` on Windows)
+#### Scenario: 源码构建
+- **WHEN** 执行 `go build ./cmd/coding-agent`
+- **THEN** 系统 SHALL 产出一个名为 `coding-agent`（Windows 下为 `coding-agent.exe`）的单一可执行文件
 
-#### Scenario: Internal packages are not importable
-- **WHEN** an external Go module attempts to import any package under `internal/`
-- **THEN** the Go compiler SHALL reject the import
+#### Scenario: internal 包不可被外部导入
+- **WHEN** 外部 Go module 尝试导入 `internal/` 下的任何包
+- **THEN** Go 编译器 SHALL 拒绝该导入
 
-### Requirement: Single binary with no runtime dependencies
-The compiled binary SHALL be self-contained, requiring no JRE, JDK, Maven, or any other runtime dependency.
+### Requirement: 单二进制文件，零运行时依赖
+编译出的二进制文件 SHALL 是自包含的，不需要 JRE、JDK、Maven 或任何其他运行时依赖。
 
-#### Scenario: Binary runs on target platform without pre-installed tools
-- **WHEN** the binary is copied to a machine with only the operating system installed
-- **THEN** the binary SHALL start and run the REPL successfully
+#### Scenario: 二进制文件在目标平台上无需预装工具即可运行
+- **WHEN** 二进制文件被复制到仅安装了操作系统的机器上
+- **THEN** 二进制文件 SHALL 成功启动并运行 REPL
 
-### Requirement: Cross-platform compilation
-The system SHALL support cross-compilation to Windows (amd64), Linux (amd64), and macOS (amd64/arm64) from any development platform.
+### Requirement: 跨平台编译
+系统 SHALL 支持从任意开发平台交叉编译到 Windows (amd64)、Linux (amd64) 和 macOS (amd64/arm64)。
 
-#### Scenario: Cross-compile for all targets
-- **WHEN** `make build-all` or equivalent is executed
-- **THEN** the system SHALL produce binaries for all supported platform/architecture combinations
+#### Scenario: 为所有目标交叉编译
+- **WHEN** 执行 `make build-all` 或等效命令
+- **THEN** 系统 SHALL 为所有支持的平台/架构组合产出二进制文件
 
-#### Scenario: Windows-specific terminal initialization
-- **WHEN** the binary runs on Windows
-- **THEN** the system SHALL enable virtual terminal processing (`ENABLE_VIRTUAL_TERMINAL_PROCESSING`) to support ANSI escape sequences
+#### Scenario: Windows 特定终端初始化
+- **WHEN** 二进制文件在 Windows 上运行
+- **THEN** 系统 SHALL 启用虚拟终端处理（`ENABLE_VIRTUAL_TERMINAL_PROCESSING`）以支持 ANSI 转义序列
 
-### Requirement: Build automation with Makefile
-The system SHALL provide a Makefile with targets for build, test, lint, and cross-compilation.
+### Requirement: 使用 Makefile 自动化构建
+系统 SHALL 提供 Makefile，包含 build、test、lint 和交叉编译目标。
 
-#### Scenario: Default build target
-- **WHEN** `make` or `make build` is executed
-- **THEN** the system SHALL compile the binary for the current platform
+#### Scenario: 默认构建目标
+- **WHEN** 执行 `make` 或 `make build`
+- **THEN** 系统 SHALL 为当前平台编译二进制文件
 
-#### Scenario: Test target
-- **WHEN** `make test` is executed
-- **THEN** the system SHALL run all unit tests and report results
+#### Scenario: 测试目标
+- **WHEN** 执行 `make test`
+- **THEN** 系统 SHALL 运行所有单元测试并报告结果
 
-#### Scenario: Clean target
-- **WHEN** `make clean` is executed
-- **THEN** the system SHALL remove all build artifacts
+#### Scenario: 清理目标
+- **WHEN** 执行 `make clean`
+- **THEN** 系统 SHALL 移除所有构建产物

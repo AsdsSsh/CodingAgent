@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/codingagent/coding-agent/internal/llm"
 	"github.com/codingagent/coding-agent/internal/sandbox"
@@ -13,7 +14,6 @@ import (
 
 const defaultMaxIterations = 50
 
-// ReActLoop executes the core ReAct (Reasoning + Acting) cycle.
 type ReActLoop struct {
 	llm          llm.Provider
 	toolRegistry *tool.ToolRegistry
@@ -21,50 +21,42 @@ type ReActLoop struct {
 	maxIter      int
 }
 
-// NewReActLoop creates a new ReAct loop with the given components.
 func NewReActLoop(llm llm.Provider, registry *tool.ToolRegistry, bus *EventBus, maxIter int) *ReActLoop {
 	if maxIter <= 0 {
 		maxIter = defaultMaxIterations
 	}
-	return &ReActLoop{
-		llm:          llm,
-		toolRegistry: registry,
-		eventBus:     bus,
-		maxIter:      maxIter,
-	}
+	return &ReActLoop{llm: llm, toolRegistry: registry, eventBus: bus, maxIter: maxIter}
 }
 
-// RunOptions controls the behavior of a ReActLoop run.
 type RunOptions struct {
-	Task         string
-	SystemPrompt string
-	Sandbox      sandbox.Sandbox
-	Workspace    string
-
-	// ProgressChan receives AgentState updates on each step (non-blocking send).
-	ProgressChan chan<- AgentState
-
-	// PermissionChan is used for blocking permission prompts.
+	Task           string
+	SystemPrompt   string
+	Sandbox        sandbox.Sandbox
+	Workspace      string
+	ProgressChan   chan<- AgentState
 	PermissionChan chan<- PermissionRequest
 	PermissionResp <-chan PermissionResponse
+	Ctx            context.Context // cancellable context for the entire run
 }
 
-// PermissionRequest is sent when a tool requires user approval.
 type PermissionRequest struct {
 	ToolName string
 	Reason   string
 }
 
-// PermissionResponse is the user's response to a permission request.
 type PermissionResponse struct {
 	Allowed     bool
 	AlwaysAllow bool
 }
 
-// Run executes a full ReAct cycle for a single task.
 func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 	messages := []llm.Message{llm.System(opts.SystemPrompt)}
 	messages = append(messages, llm.User(opts.Task))
+
+	baseCtx := opts.Ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
 
 	var toolCallRecords []ToolCallRecord
 	policyEngine := opts.Sandbox.PolicyEngine()
@@ -72,17 +64,24 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 	for step := 1; step <= r.maxIter; step++ {
 		r.emitProgressWithTool(opts, step, messages, "")
 
-		// === THOUGHT: Call LLM ===
-		response, err := r.llm.Chat(context.Background(), messages, r.toolRegistry.ToLLMFormats())
+		reqCtx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
+		response, err := r.llm.Chat(reqCtx, messages, r.toolRegistry.ToLLMFormats())
+		cancel()
+
 		if err != nil {
+			if baseCtx.Err() != nil {
+				return AgentResult{
+					Answer:    "Task cancelled by user.",
+					Steps:     step,
+					ToolCalls: toolCallRecords,
+				}
+			}
 			messages = append(messages, llm.User(fmt.Sprintf("LLM error: %v. Please try to continue.", err)))
 			continue
 		}
 
-		// No tool calls → text response or final answer
 		if !response.HasToolCalls() {
 			messages = append(messages, llm.Assistant(response.Content))
-
 			if response.IsFinalAnswer {
 				return AgentResult{
 					Answer:    response.Content,
@@ -93,7 +92,6 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 			continue
 		}
 
-		// === ACTION + OBSERVATION: Execute tool calls ===
 		type indexedResult struct {
 			index  int
 			result string
@@ -103,7 +101,6 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 
 		var wg sync.WaitGroup
 		for i, tc := range response.ToolCalls {
-			// Emit progress with tool name before each tool execution
 			r.emitProgressWithTool(opts, step, messages, tc.Name)
 			wg.Add(1)
 			go func(idx int, call llm.ToolCall) {
@@ -114,7 +111,6 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 		}
 		wg.Wait()
 
-		// Append tool calls and results in original order
 		for i := range response.ToolCalls {
 			tc := response.ToolCalls[i]
 			messages = append(messages, llm.AssistantWithToolCalls(llm.CloneToolCall(tc)))
@@ -127,12 +123,14 @@ func (r *ReActLoop) Run(opts RunOptions) AgentResult {
 		}
 	}
 
-	// Max iterations reached
 	messages = append(messages, llm.User("You have reached the maximum number of steps. Please provide your final answer now."))
-	finalResp, err := r.llm.Chat(context.Background(), messages, nil)
+	reqCtx, cancel := context.WithTimeout(baseCtx, 30*time.Second)
+	finalResp, err := r.llm.Chat(reqCtx, messages, nil)
+	cancel()
+
 	if err != nil {
 		return AgentResult{
-			Answer:    "Error: Failed to get final answer after max iterations: " + err.Error(),
+			Answer:    "Error: " + err.Error(),
 			Steps:     r.maxIter,
 			ToolCalls: toolCallRecords,
 			Error:     err,
@@ -159,7 +157,7 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 	switch decision.Verdict {
 	case sandbox.VerdictDeny:
 		*records = append(*records, ToolCallRecord{Name: call.Name, Args: call.Arguments, Success: false})
-		return "Error: Tool '" + call.Name + "' was denied by security policy: " + decision.Reason
+		return "Error: Tool '" + call.Name + "' was denied: " + decision.Reason
 
 	case sandbox.VerdictPrompt:
 		if opts.PermissionChan != nil && opts.PermissionResp != nil {
@@ -174,8 +172,7 @@ func (r *ReActLoop) executeTool(opts RunOptions, call llm.ToolCall, pe *sandbox.
 			}
 		} else {
 			*records = append(*records, ToolCallRecord{Name: call.Name, Args: call.Arguments, Success: false})
-			return "Error: Tool '" + call.Name + "' requires permission escalation: " + decision.Reason +
-				". Use a different approach or ask the user to escalate permissions."
+			return "Error: Tool '" + call.Name + "' requires permission escalation: " + decision.Reason
 		}
 
 	case sandbox.VerdictAllow:

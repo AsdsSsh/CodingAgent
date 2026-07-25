@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/codingagent/coding-agent/internal/config"
 	"github.com/codingagent/coding-agent/internal/llm"
 	"github.com/codingagent/coding-agent/internal/sandbox"
@@ -90,7 +92,7 @@ func (o *Orchestrator) Run(task string) AgentResult {
 }
 
 // RunWithChannels executes a task with progress and permission channels for TUI integration.
-func (o *Orchestrator) RunWithChannels(task string, progressChan chan<- AgentState, permChan chan<- PermissionRequest, permResp <-chan PermissionResponse) AgentResult {
+func (o *Orchestrator) RunWithChannels(ctx context.Context, task string, progressChan chan<- AgentState, permChan chan<- PermissionRequest, permResp <-chan PermissionResponse) AgentResult {
 	return o.reactLoop.Run(RunOptions{
 		Task:           task,
 		SystemPrompt:   buildSystemPrompt(),
@@ -99,6 +101,7 @@ func (o *Orchestrator) RunWithChannels(task string, progressChan chan<- AgentSta
 		ProgressChan:   progressChan,
 		PermissionChan: permChan,
 		PermissionResp: permResp,
+		Ctx:            ctx,
 	})
 }
 

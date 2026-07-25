@@ -1,27 +1,27 @@
-## 1. Welcome screen
+## 1. 欢迎页
 
-- [x] 1.1 Render welcome content when messages list is empty
+- [x] 1.1 消息列表为空时渲染欢迎内容
 
-## 2. Help bar update
+## 2. 帮助栏更新
 
-- [x] 2.1 Fix help bar: Ctrl+Enter → Enter / Ctrl+S
+- [x] 2.1 修正帮助栏：Ctrl+Enter → Enter / Ctrl+S
 
-## 3. Viewport auto-scroll
+## 3. Viewport 自动滚动
 
-- [x] 3.1 Call GotoBottom() after each message append
+- [x] 3.1 每次追加消息后调用 GotoBottom()
 
-## 4. Conversation dividers
+## 4. 对话分隔线
 
-- [x] 4.1 Insert separator between conversation turns
+- [x] 4.1 在对话轮次之间插入分隔符
 
-## 5. Permission key hints
+## 5. 权限按键提示
 
-- [x] 5.1 Add key labels to permission modal buttons
+- [x] 5.1 在权限模态按钮上添加按键标签
 
-## 6. Thinking state refinement
+## 6. 思考状态细化
 
-- [x] 6.1 Distinguish "Thinking" vs tool execution in status bar
+- [x] 6.1 在状态栏中区分 "Thinking" 和工具执行状态
 
-## 7. Input echo polish
+## 7. 输入回显优化
 
-- [x] 7.1 Style user messages with block/bubble look
+- [x] 7.1 用气泡/块样式渲染用户消息

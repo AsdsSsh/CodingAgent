@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -36,6 +38,7 @@ type Model struct {
 
 	// Agent interaction
 	orchestrator   *agent.Orchestrator
+	cancelFunc     context.CancelFunc // cancel in-flight LLM request
 	progressChan   chan agent.AgentState
 	resultChan     chan agent.AgentResult
 	permReqChan    chan agent.PermissionRequest

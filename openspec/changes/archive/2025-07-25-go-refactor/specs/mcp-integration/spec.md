@@ -1,46 +1,46 @@
-## ADDED Requirements
+## ADDED 需求
 
-### Requirement: MCP server configuration via YAML
-The system SHALL support configuring MCP (Model Context Protocol) servers in the YAML configuration file, with support for stdio and HTTP transports.
+### Requirement: 通过 YAML 配置 MCP 服务器
+系统 SHALL 支持在 YAML 配置文件中配置 MCP（模型上下文协议）服务器，支持 stdio 和 HTTP 传输方式。
 
-#### Scenario: Stdio transport configuration
-- **WHEN** an MCP server is configured with `transport: stdio`, a `command`, and optional `args`
-- **THEN** the system SHALL launch the command as a subprocess and communicate over stdin/stdout using the MCP protocol
+#### Scenario: Stdio 传输配置
+- **WHEN** MCP 服务器配置了 `transport: stdio`、`command` 和可选的 `args`
+- **THEN** 系统 SHALL 将命令作为子进程启动，通过 stdin/stdout 使用 MCP 协议通信
 
-#### Scenario: HTTP transport configuration
-- **WHEN** an MCP server is configured with `transport: http` and a `url`
-- **THEN** the system SHALL connect to the URL using HTTP streaming transport
+#### Scenario: HTTP 传输配置
+- **WHEN** MCP 服务器配置了 `transport: http` 和 `url`
+- **THEN** 系统 SHALL 使用 HTTP 流式传输连接该 URL
 
-#### Scenario: Environment variables for MCP server process
-- **WHEN** an MCP server configuration includes `env` key-value pairs
-- **THEN** the system SHALL set those environment variables on the server subprocess
+#### Scenario: MCP 服务器进程环境变量
+- **WHEN** MCP 服务器配置包含 `env` 键值对
+- **THEN** 系统 SHALL 在服务器子进程上设置这些环境变量
 
-### Requirement: MCP tools integrate with ToolRegistry
-The system SHALL register MCP-provided tools into the existing ToolRegistry, making them available to the LLM alongside built-in tools.
+### Requirement: MCP 工具与 ToolRegistry 集成
+系统 SHALL 将 MCP 提供的工具注册到现有 ToolRegistry 中，使其与内置工具一起对 LLM 可用。
 
-#### Scenario: MCP tools appear in LLM tool list
-- **WHEN** an MCP server is connected and its tools are registered
-- **THEN** the `ToLLMFormats()` method SHALL include both built-in and MCP tools
+#### Scenario: MCP 工具出现在 LLM 工具列表中
+- **WHEN** MCP 服务器连接成功且其工具已注册
+- **THEN** `ToLLMFormats()` 方法 SHALL 同时包含内置工具和 MCP 工具
 
-#### Scenario: MCP tool execution delegates to MCP server
-- **WHEN** the LLM calls an MCP-provided tool
-- **THEN** the system SHALL route the call to the appropriate MCP server and return the response as a tool result observation
+#### Scenario: MCP 工具执行委托给 MCP 服务器
+- **WHEN** LLM 调用一个 MCP 提供的工具
+- **THEN** 系统 SHALL 将调用路由到对应的 MCP 服务器，并将响应作为工具结果观察返回
 
-#### Scenario: MCP tool name collision with built-in
-- **WHEN** an MCP server provides a tool with the same name as a built-in tool
-- **THEN** the system SHALL log a warning and skip the duplicate MCP tool registration
+#### Scenario: MCP 工具名与内置工具冲突
+- **WHEN** MCP 服务器提供与内置工具同名的工具
+- **THEN** 系统 SHALL 记录警告并跳过重复的 MCP 工具注册
 
-### Requirement: Lazy MCP server connection
-The system SHALL defer MCP server connection until the first tool from that server is actually invoked, to minimize startup time.
+### Requirement: MCP 服务器延迟连接
+系统 SHALL 将 MCP 服务器连接推迟到该服务器的第一个工具被实际调用时，以最小化启动时间。
 
-#### Scenario: Server not connected on startup
-- **WHEN** the agent starts and MCP servers are configured
-- **THEN** the system SHALL cache the server configurations but SHALL NOT establish connections until a tool from that server is called
+#### Scenario: 启动时服务器未连接
+- **WHEN** agent 启动且配置了 MCP 服务器
+- **THEN** 系统 SHALL 缓存服务器配置但 SHALL NOT 建立连接，直到该服务器的工具被调用
 
-#### Scenario: Connection established on first tool call
-- **WHEN** the LLM requests a tool from an MCP server that has not been connected yet
-- **THEN** the system SHALL establish the connection, retrieve the tool list, and execute the requested tool
+#### Scenario: 首次工具调用时建立连接
+- **WHEN** LLM 请求一个尚未连接的 MCP 服务器的工具
+- **THEN** 系统 SHALL 建立连接、获取工具列表并执行请求的工具
 
-#### Scenario: Connection failure produces error observation
-- **WHEN** an MCP server fails to connect or the subprocess exits abnormally
-- **THEN** the system SHALL return an error observation to the LLM, allowing it to try an alternative approach
+#### Scenario: 连接失败产生错误观察
+- **WHEN** MCP 服务器连接失败或子进程异常退出
+- **THEN** 系统 SHALL 向 LLM 返回错误观察，允许其尝试替代方案
