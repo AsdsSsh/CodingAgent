@@ -15,9 +15,10 @@ type Sandbox interface {
 
 // CommandResult is the result of a sandbox command execution.
 type CommandResult struct {
-	Success bool
-	Output  string
-	Error   string
+	Success   bool
+	Output    string
+	Error     string
+	Truncated bool
 }
 
 // CommandOk creates a successful command result.

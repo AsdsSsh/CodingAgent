@@ -1,7 +1,10 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -39,7 +42,7 @@ func NewSubprocessSandbox(workspace string, timeoutSeconds int, blockedCmds []st
 func (s *SubprocessSandbox) PolicyEngine() *PolicyEngine { return s.policyEngine }
 
 func (s *SubprocessSandbox) ExecuteCommand(command string) CommandResult {
-	// Blacklist check before spawning process
+	// Blacklist check
 	for _, blocked := range s.blockedCmds {
 		if strings.Contains(command, blocked) {
 			return CommandFail("Command blocked by security policy: contains '" + blocked + "'")
@@ -52,30 +55,103 @@ func (s *SubprocessSandbox) ExecuteCommand(command string) CommandResult {
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/c", command)
+		cmd = exec.Command("cmd", "/c", command)
 	} else {
-		cmd = exec.CommandContext(ctx, "bash", "-c", command)
+		cmd = exec.Command("bash", "-c", command)
 	}
 	cmd.Dir = s.workspace
 
-	output, err := cmd.CombinedOutput()
+	// Use process group so we can kill children on timeout
+	cmd.SysProcAttr = newProcessGroupAttr()
 
-	if ctx.Err() == context.DeadlineExceeded {
-		return CommandFail("Command timed out after " + itoa(s.timeoutSeconds) + " seconds")
-	}
-
+	// Pipe stdout and stderr manually (avoid CombinedOutput pipe deadlock)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		exitCode := 1
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-		result := fromCommandOutput(exitCode, string(output))
-		return CommandResult{Success: result.Success, Output: result.Output, Error: result.Error}
+		return CommandFail("Failed to create stdout pipe: " + err.Error())
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return CommandFail("Failed to create stderr pipe: " + err.Error())
 	}
 
-	result := fromCommandOutput(0, string(output))
-	return CommandResult{Success: result.Success, Output: result.Output, Error: result.Error}
+	if err := cmd.Start(); err != nil {
+		return CommandFail("Failed to start command: " + err.Error())
+	}
+
+	// Read stdout + stderr in goroutines
+	const maxOutput = 500_000
+	var outBuf, errBuf bytes.Buffer
+	outDone := make(chan struct{})
+	errDone := make(chan struct{})
+
+	go func() {
+		io.CopyN(&outBuf, stdout, maxOutput)
+		close(outDone)
+	}()
+	go func() {
+		io.CopyN(&errBuf, stderr, maxOutput)
+		close(errDone)
+	}()
+
+	// Wait for command to finish or timeout
+	cmdDone := make(chan error, 1)
+	go func() {
+		cmdDone <- cmd.Wait()
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Timeout: kill the entire process tree
+		killProcessTree(cmd.Process.Pid)
+		return CommandFail("Command timed out after " + itoa(s.timeoutSeconds) + " seconds")
+
+	case err := <-cmdDone:
+		// Command finished — wait for all output to be read
+		<-outDone
+		<-errDone
+
+		var output string
+		if outBuf.Len()+errBuf.Len() > maxOutput {
+			output = outBuf.String() + errBuf.String()
+			if len(output) > maxOutput {
+				output = output[:maxOutput] + "\n... [output truncated]"
+			}
+			if err != nil {
+				return CommandResult{
+					Success:   false,
+					Output:    output,
+					Error:     "Command failed and output truncated",
+					Truncated: true,
+				}
+			}
+			return CommandResult{Success: true, Output: output, Truncated: true}
+		}
+
+		output = outBuf.String()
+
+		if errBuf.Len() > 0 {
+			if len(output) > 0 {
+				output += "\n"
+			}
+			output += errBuf.String()
+		}
+
+		if err != nil {
+			exitCode := 1
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			}
+			return CommandResult{
+				Success: false,
+				Output:  output,
+				Error:   fmt.Sprintf("Exit code: %d", exitCode),
+			}
+		}
+
+		return CommandResult{Success: true, Output: output}
+	}
 }
+
 
 func (s *SubprocessSandbox) IsInWorkspace(path string) bool {
 	absPath, err := filepathAbs(path)
@@ -89,15 +165,12 @@ func (s *SubprocessSandbox) IsInWorkspace(path string) bool {
 	return strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(absWS))
 }
 
-// filepathAbs is a thin wrapper for testing.
 var filepathAbs = func(path string) (string, error) {
 	return strings.ToLower(path), nil
 }
 
 func init() {
-	// Use the real filepath.Abs at runtime
 	filepathAbs = func(path string) (string, error) {
-		// Clean the path first
 		cleaned := strings.TrimSpace(path)
 		if cleaned == "" {
 			cleaned = "."
@@ -118,15 +191,3 @@ func filepathAbsReal(path string) (string, error) {
 	return strings.ToLower(abs), nil
 }
 
-// fromCommandOutput combines stdout/stderr into a single result.
-func fromCommandOutput(exitCode int, output string) CommandResult {
-	const maxOutput = 100_000
-	truncated := len(output) > maxOutput
-	if truncated {
-		output = output[:maxOutput] + "\n... [output truncated]"
-	}
-	if exitCode != 0 {
-		return CommandResult{Success: false, Output: output, Error: "Exit code: " + itoa(exitCode)}
-	}
-	return CommandResult{Success: true, Output: output}
-}
