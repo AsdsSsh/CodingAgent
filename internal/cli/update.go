@@ -37,7 +37,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 
-		case "ctrl+enter":
+		case "ctrl+s":
+			// Ctrl+S: primary submit (works cross-platform)
 			if m.focus == FocusInput && !m.agentRunning {
 				task := strings.TrimSpace(m.input.Value())
 				if task != "" {
@@ -46,6 +47,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.handleTaskSubmit(task)
 				}
 			}
+
+		case "enter":
+			// Enter: submit if the input only has one line (not multi-line)
+			if m.focus == FocusInput && !m.agentRunning {
+				task := strings.TrimSpace(m.input.Value())
+				if strings.HasPrefix(task, "/") {
+					// Slash command on single line
+					cmd, args := parseSlashCommand(task)
+					if cmd != "" {
+						m.input.Reset()
+						return m, m.handleSlashCommand(cmd, args)
+					}
+				}
+				if task != "" && !strings.Contains(task, "\n") {
+					m.messages = append(m.messages, ChatMessage{Role: "user", Content: task})
+					m.input.Reset()
+					return m.handleTaskSubmit(task)
+				}
+			}
+			// Multi-line: let textarea handle Enter for newline (falls through to sub-component update)
 
 		case "tab":
 			if m.focus == FocusInput {
@@ -56,15 +77,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Focus()
 			}
 			return m, nil
-
-		default:
-			// Check for slash commands when idle
-			if !m.agentRunning && m.focus == FocusInput {
-				line := m.input.Value()
-				if strings.HasPrefix(line, "/") && strings.Contains(line, "\n") {
-					// Simple slash command detection
-				}
-			}
 		}
 
 	// ─── Agent Progress ───
