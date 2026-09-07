@@ -1,6 +1,12 @@
 # Go build artifacts
-coding-agent.exe
+*.exe
 coding-agent
+
+# Java build artifacts (legacy)
+target/
+
+# Local settings
+.claude/settings.local.json
 
 # IDE
 .idea/

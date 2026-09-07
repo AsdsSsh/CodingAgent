@@ -8,7 +8,7 @@ endif
 
 # Build for current platform
 build:
-	go build -o $(BINARY) ./cmd/coding-agent
+	go build -trimpath -o $(BINARY) ./cmd/coding-agent
 
 # Run all tests
 test:
@@ -30,14 +30,14 @@ clean:
 
 # Cross-compile for all platforms
 build-all:
-	GOOS=windows GOARCH=amd64 go build -o coding-agent-windows-amd64.exe ./cmd/coding-agent
-	GOOS=linux   GOARCH=amd64 go build -o coding-agent-linux-amd64 ./cmd/coding-agent
-	GOOS=darwin  GOARCH=amd64 go build -o coding-agent-darwin-amd64 ./cmd/coding-agent
-	GOOS=darwin  GOARCH=arm64 go build -o coding-agent-darwin-arm64 ./cmd/coding-agent
+	GOOS=windows GOARCH=amd64 go build -trimpath -o coding-agent-windows-amd64.exe ./cmd/coding-agent
+	GOOS=linux   GOARCH=amd64 go build -trimpath -o coding-agent-linux-amd64 ./cmd/coding-agent
+	GOOS=darwin  GOARCH=amd64 go build -trimpath -o coding-agent-darwin-amd64 ./cmd/coding-agent
+	GOOS=darwin  GOARCH=arm64 go build -trimpath -o coding-agent-darwin-arm64 ./cmd/coding-agent
 
 # Build with stripped debug info (smaller binary)
 build-release:
-	go build -ldflags="-s -w" -o $(BINARY) ./cmd/coding-agent
+	go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/coding-agent
 
 # Show help
 help:
